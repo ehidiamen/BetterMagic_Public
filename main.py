@@ -59,6 +59,7 @@ llm_agent = initialize_agent(
     agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
     verbose=True,
     memory=ConversationBufferMemory(memory_key="chat_history"),
+    max_iterations=30,
 )
 
 
