@@ -16,11 +16,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from deepgram import DeepgramClient, SpeakOptions
 import os
+import spacy
 
-
+# Load a small NLP model for Named Entity Recognition (NER)
+nlp = spacy.load("en_core_web_sm")
 # ✅ Load environment variables (API keys)
 load_dotenv()
-YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY_2")
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 
 # ✅ Initialize AI model (Groq Llama3)
@@ -40,13 +42,26 @@ class VideoRequest(BaseModel):
 
 @tool
 def extract_character_mentions(text: str):
-    """Finds and extracts notable characters from the summary using regex."""
-    print("extract_character_mentions");
-    # Look for capitalized words (which may be names)
-    matches = re.findall(r"(?<!\.)\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)*\b", text)
-    
-    # Return unique names
-    return list(set(matches))
+    """Extracts notable characters from the summary using regex and NLP."""
+    print("extract_character_mentions")
+
+    # Regex to capture proper names (multi-word names allowed)
+    regex_pattern = r"\b(?:[A-Z][a-z]+(?:\s[A-Z][a-z]+)*)\b"
+    matches = re.findall(regex_pattern, text)
+
+    # Filter out common words that start with capital letters (e.g., "The", "It")
+    common_words = {"The", "A", "It", "And", "He", "She", "They", "In"}
+    filtered_matches = [name for name in matches if name not in common_words]
+
+    # Apply Named Entity Recognition (NER) for backup extraction
+    doc = nlp(text)
+    ner_names = [ent.text for ent in doc.ents if ent.label_ in ["PERSON", "ORG"]]
+
+    # Combine regex and NLP results, removing duplicates
+    character_names = list(set(filtered_matches + ner_names))
+
+    return character_names  # Return a unique list of character names
+
 @tool
 def analyze_sentiment_service(text: str):
     """Analyzes the sentiment of a given text (Positive, Negative, Neutral)."""
@@ -59,9 +74,16 @@ def analyze_sentiment_service(text: str):
     return "Neutral"
 
 @tool
-def get_youtube_transcript(video_id: str):
+def get_youtube_transcript(video_url: str):
     """Fetches the transcript of a YouTube video given its ID."""
     print("get_youtube_transcript")
+     # Extract video ID from the URL using regex
+    match = re.search(r"v=([a-zA-Z0-9_-]+)", video_url)
+    if match:
+        video_id = match.group(1)
+    else:
+        video_id = video_url  # Assume it's already a video ID
+
     try:
         transcript = YouTubeTranscriptApi.get_transcript(video_id)
         transcript_text = " ".join([entry["text"] for entry in transcript])
@@ -127,7 +149,7 @@ def get_youtube_video(title: str):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching video: {str(e)}")
-@tool
+
 def generate_summary(video_title: str):
     """Generates a structured summary using LangChain."""
     response_schemas = [
@@ -187,16 +209,19 @@ def generate_summary(video_title: str):
 
     return summary_data
 
+import json
+import re
+
 def extract_summary_data(response_json):
     """
-    Cleans the response JSON by removing extra text before retrieving the 'output' field,
-    then parsing it into a valid JSON object.
+    Cleans the response JSON by extracting and parsing the 'output' field.
 
     Steps:
     1. Extracts the 'output' field from the response.
-    2. Removes any text before/after the actual JSON using regex.
-    3. Fixes escape characters to ensure proper JSON formatting.
-    4. Parses the cleaned JSON string into a dictionary.
+    2. If "AI:" is present, extracts the content after it.
+    3. Uses regex to isolate only the JSON object.
+    4. Fixes escape characters and ensures proper formatting.
+    5. Parses the cleaned JSON string into a dictionary.
 
     Args:
         response_json (dict): The original JSON response containing an 'output' field.
@@ -205,34 +230,40 @@ def extract_summary_data(response_json):
         dict: A properly parsed JSON object with the summary details or None if parsing fails.
     """
     try:
-        # Extract the 'output' field (if it exists)
+        # Step 1: Extract the 'output' field
         output_text = response_json.get("output", "")
 
         if not output_text:
             raise ValueError("No 'output' field found in response.")
 
-        # Use regex to extract ONLY the JSON object (handles extra text around it)
-        json_match = re.search(r'\{.*\}', output_text, re.DOTALL)
+        # Step 2: Find "AI:" and extract text after it (if present)
+        ai_match = re.search(r'AI:\s*(\{.*\})', output_text, re.DOTALL)
+        if ai_match:
+            output_text = ai_match.group(1)  # Extract everything after "AI:"
 
+        # Step 3: Use regex to extract only the JSON object
+        json_match = re.search(r'\{.*\}', output_text, re.DOTALL)
         if not json_match:
             raise ValueError("No valid JSON found in 'output' field.")
 
-        # Extract only the JSON part
+        # Step 4: Extract and clean the JSON string
         json_string = json_match.group(0).strip()
 
-        # Ensure proper formatting by replacing incorrectly escaped quotes
+        # Fix incorrectly escaped quotes
         json_string = json_string.replace('\\"', '"')
 
-        # Fix cases where newlines or unnecessary characters break JSON formatting
-        json_string = re.sub(r'\\n', '', json_string)  # Remove stray `\n` characters
+        # Remove stray newlines
+        json_string = re.sub(r'\\n', '', json_string)
 
-        # Parse the extracted JSON string into a dictionary
+        # Step 5: Parse the extracted JSON string into a dictionary
         parsed_output = json.loads(json_string)
 
-        return parsed_output  # Return the cleaned JSON object
+        return parsed_output  # Return cleaned JSON object
 
     except (json.JSONDecodeError, ValueError) as e:
         print(f"Error parsing JSON: {e}")
         return None  # Return None if parsing fails
+
+
 
 
