@@ -14,14 +14,14 @@ from langchain.tools import Tool
 
 from video_summary_service import (
     get_youtube_video,
-    get_youtube_transcript,
+    #get_youtube_transcript_data,
     generate_summary,
     analyze_sentiment_service,
     # extract_character_mentions,
     generate_audio_summary,
     extract_summary_data,
 )
-# FastAPI Endpoint
+# ✅ FastAPI Endpoint
 app = FastAPI()
 # Enable CORS for frontend access
 app.add_middleware(
@@ -37,7 +37,7 @@ if not os.path.exists("static"):
 # Mount the static directory to serve audio files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Define AI model using Groq
+# ✅ Define AI model using Groq
 llm = ChatGroq(
     model="llama3-8b-8192",
     temperature=0.1,
@@ -45,7 +45,7 @@ llm = ChatGroq(
     max_retries=2
 )
 
-# Define tools list
+# ✅ Define tools list
 #tools = [
 #    get_youtube_video,
 #    get_youtube_transcript,
@@ -61,11 +61,11 @@ tools = [
         func=get_youtube_video,
         description="Search for a YouTube video based on a given title."
     ),
-    Tool(
-        name="get_youtube_transcript",
-        func=get_youtube_transcript,
-        description="Retrieve the transcript of a given YouTube video."
-    ),
+    #Tool(
+    #    name="get_youtube_transcript",
+    #    func=get_youtube_transcript_data,
+    #    description="Retrieve the transcript of a given YouTube video."
+    #),
     Tool(
         name="generate_summary",
         func=generate_summary,
@@ -83,7 +83,7 @@ tools = [
     ),
 ]
 
-# Initialize LangChain Agent with tools
+# ✅ Initialize LangChain Agent with tools
 llm_agent = initialize_agent(
     tools=tools,
     llm=llm,
@@ -110,8 +110,8 @@ def execute_function_call(function_name, arguments, messages: list[dict[str, str
         return video_data
 
     # Handle transcript retrieval
-    elif function_name == "get_youtube_transcript":
-        return get_youtube_transcript(**arguments)
+    #elif function_name == "get_youtube_transcript":
+    #    return get_youtube_transcript_data(**arguments)
 
     # Handle summarization
     # elif function_name == "generate_summary":
@@ -156,14 +156,14 @@ def run_agent(input_text: str):
         response_str = llm_agent.invoke(messages)
 
         #try:
-            # Ensure response is JSON
+            # ✅ Ensure response is JSON
         #    response = json.loads(response_str)
 
         #except json.JSONDecodeError:
         #    print("Error: LLM did not return JSON. Returning raw response for debugging.")
         #    return {"error": "Invalid response from AI", "response": response_str}  # Return raw response for debugging
 
-        # Check if AI called a function
+        # ✅ Check if AI called a function
         function_call = response_str.get("tool_call", None)
 
         if function_call:
@@ -175,7 +175,7 @@ def run_agent(input_text: str):
             # Execute the function safely
             function_result = execute_function_call(function_name, arguments, messages)
 
-            # Ensure function result is valid JSON
+            # ✅ Ensure function result is valid JSON
             if isinstance(function_result, dict):
                 messages.append({"role": "assistant", "content": json.dumps(function_result, indent=4)})
             elif isinstance(function_result, str):
@@ -191,7 +191,7 @@ def run_agent(input_text: str):
 
 
 
-# Define input schema
+# ✅ Define input schema
 class VideoRequest(BaseModel):
     video_title: str
 
@@ -210,7 +210,7 @@ async def summarize_video(request: VideoRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
-# Run server if executed directly
+# ✅ Run server if executed directly
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

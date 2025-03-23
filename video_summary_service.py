@@ -18,7 +18,7 @@ from deepgram import DeepgramClient, SpeakOptions
 import os
 import spacy
 
-# Load a small NLP model for Named Entity Recognition (NER)
+# Load a small NLP model for Named Entity RAecognition (NER)
 nlp = spacy.load("en_core_web_sm")
 # ✅ Load environment variables (API keys)
 load_dotenv()
