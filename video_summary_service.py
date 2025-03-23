@@ -212,57 +212,57 @@ def generate_summary(video_title: str):
 import json
 import re
 
+import json
+import re
+
 def extract_summary_data(response_json):
     """
-    Cleans the response JSON by extracting and parsing the 'output' field.
+    Extracts and cleans JSON summary data from the response.
 
-    Steps:
-    1. Extracts the 'output' field from the response.
-    2. If "AI:" is present, extracts the content after it.
-    3. Uses regex to isolate only the JSON object.
-    4. Fixes escape characters and ensures proper formatting.
-    5. Parses the cleaned JSON string into a dictionary.
+    1. Attempts to parse the 'output' field normally.
+    2. If parsing fails, searches the entire document for JSON between "\nAI: ```" and "\n```".
+    3. Returns the extracted JSON if found, else returns an error message.
 
     Args:
-        response_json (dict): The original JSON response containing an 'output' field.
+        response_json (dict): The original JSON response.
 
     Returns:
-        dict: A properly parsed JSON object with the summary details or None if parsing fails.
+        dict: A properly parsed JSON object or an error message if extraction fails.
     """
     try:
-        # Step 1: Extract the 'output' field
+        # Step 1: Extract the 'output' field (normal case)
         output_text = response_json.get("output", "")
 
         if not output_text:
             raise ValueError("No 'output' field found in response.")
 
-        # Step 2: Find "AI:" and extract text after it (if present)
-        ai_match = re.search(r'AI:\s*(\{.*\})', output_text, re.DOTALL)
-        if ai_match:
-            output_text = ai_match.group(1)  # Extract everything after "AI:"
-
-        # Step 3: Use regex to extract only the JSON object
+        # Step 2: Try extracting JSON from 'output' directly
         json_match = re.search(r'\{.*\}', output_text, re.DOTALL)
-        if not json_match:
-            raise ValueError("No valid JSON found in 'output' field.")
 
-        # Step 4: Extract and clean the JSON string
-        json_string = json_match.group(0).strip()
+        if json_match:
+            json_string = json_match.group(0).strip()
+            return json.loads(json_string)  # ✅ Return if successful
 
-        # Fix incorrectly escaped quotes
-        json_string = json_string.replace('\\"', '"')
-
-        # Remove stray newlines
-        json_string = re.sub(r'\\n', '', json_string)
-
-        # Step 5: Parse the extracted JSON string into a dictionary
-        parsed_output = json.loads(json_string)
-
-        return parsed_output  # Return cleaned JSON object
+        raise ValueError("No valid JSON found in 'output' field.")
 
     except (json.JSONDecodeError, ValueError) as e:
-        print(f"Error parsing JSON: {e}")
-        return None  # Return None if parsing fails
+        print(f"Error parsing JSON normally: {e}")
+
+        # Step 3: Search entire response JSON for AI block
+        response_str = json.dumps(response_json)  # Convert full response to string
+
+        ai_json_match = re.search(r'\nAI:\s*```(.*?)```', response_str, re.DOTALL)
+
+        if ai_json_match:
+            extracted_json_str = ai_json_match.group(1).strip()
+
+            try:
+                return json.loads(extracted_json_str)  # ✅ Return extracted JSON
+            except json.JSONDecodeError as json_error:
+                print(f"Error parsing extracted AI JSON: {json_error}")
+
+        return {"error": "No valid JSON found in 'output' or AI block."}  # Fallback case
+
 
 
 
